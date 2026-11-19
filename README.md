@@ -16,12 +16,7 @@ Requires `gcc` (or `clang`) and Python 3 with `numpy` installed (`pip install nu
 cd code
 
 # Compile the C shared library:
-# Linux:
 gcc -O3 -fPIC -shared mathlib.c -o libmathlib.so
-# macOS:
-clang -O3 -fPIC -shared mathlib.c -o libmathlib.dylib
-# Windows (MinGW):
-gcc -O3 -shared mathlib.c -o mathlib.dll
 
 # Run the basic ctypes example and performance benchmarks:
 python3 run_ctypes.py
