@@ -1,18 +1,28 @@
-# Compiler Optimizations & Why Python Libraries Are Written in C (COMP 211 Checkoff 3)
+# How Python Libraries Are Implemented in C (COMP 211 Checkoff 3)
 
 ## Overview
-For this project, I explored how C compiler optimizations (`-O0` vs. `-O2`/`-O3`) work under the hood and why high-performance Python libraries like NumPy and PyTorch implement their core math routines in C (the "two-language solution").
+An exploration into how CPython represents dynamic objects under the hood and how high-performance Python libraries (like NumPy) achieve near-native C execution speed.
 
 ## Key Discoveries
-1. **The "As-If" Rule & Compiler Passes:** Compilers like GCC translate C into an Intermediate Representation (IR) and aggressively rewrite code—using register allocation, loop-invariant code motion, strength reduction, and SIMD auto-vectorization—as long as the observable output remains identical.
-2. **Pointer Aliasing & `restrict`:** Pointers can block optimizations if two pointers might reference the same memory address. Using C's `restrict` keyword guarantees non-overlapping memory, allowing `-O3` to vectorize loops.
-3. **Why Pure Python Is Slow:** Python is *not* compiled with `-O0`; it is dynamically interpreted. A Python `list` is an array of heap pointers (`PyObject**`), meaning every loop iteration suffers from pointer chasing, runtime type checks, and 28-byte object overhead per integer.
-4. **The Two-Language Solution (`ctypes` & Buffer Protocol):** Python acts as ergonomic "glue" at the top, while handing raw contiguous memory pointers (`double *`) to pre-compiled `-O2`/`-O3` C shared libraries for the heavy lifting.
+1. **Everything is a `PyObject*`:** Every Python object lives on the heap as a C struct starting with a reference count (`ob_refcnt`) and a type pointer (`ob_type`). Specific types embed `PyObject` at byte offset 0 to simulate inheritance in C.
+2. **Pointer Chasing vs. Contiguous Buffers:** A Python `list` is an array of `PyObject*` pointers scattered across the heap, causing CPU cache misses and per-element type checks. NumPy wraps one `PyObject` header around a raw C pointer (`char *data`) to a contiguous block of unboxed primitives.
+3. **Dynamic Linking via `ctypes`:** Standard C code compiled into a position-independent shared library (`-fPIC -shared`) can be loaded into Python's address space via `dlopen()` (`ctypes.CDLL`).
+4. **The Golden Rule of FFI (Amortize the Crossing):** Calling a tiny C function inside a Python loop is *slower* than pure Python due to `libffi` stack-building and type-marshaling overhead (~150–400 ns per call). High performance requires pushing the loop into C.
 
-## How to Run the Experiment
-Compile the C code twice—once unoptimized (`-O0`) and once heavily optimized (`-O3`)—then run the Python benchmark:
+## How to Run the Code
+Requires `gcc` (or `clang`) and Python 3 with `numpy` installed (`pip install numpy`).
 
 ```bash
-gcc -O0 -shared -fPIC fast_math.c -o fast_math_O0.so
-gcc -O3 -shared -fPIC fast_math.c -o fast_math_O3.so
+cd code
+
+# Compile the C shared library:
+# Linux:
+gcc -O3 -fPIC -shared mathlib.c -o libmathlib.so
+# macOS:
+clang -O3 -fPIC -shared mathlib.c -o libmathlib.dylib
+# Windows (MinGW):
+gcc -O3 -shared mathlib.c -o mathlib.dll
+
+# Run the basic ctypes example and performance benchmarks:
+python3 run_ctypes.py
 python3 benchmark.py
